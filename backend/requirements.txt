@@ -1,2 +1,10 @@
 fastapi
 uvicorn
+pydantic
+python-multipart
+aiofiles
+PyMuPDF
+sentence-transformers
+qdrant-client
+couchdb
+nltk
