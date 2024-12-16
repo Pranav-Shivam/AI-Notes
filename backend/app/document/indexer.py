@@ -1,72 +1,108 @@
-import os
-from typing import List, Dict, Any
-import hashlib
+#imports
+from core.db.couch_db.couch_documents_db import CouchDocumentsDB
+from core.db.couch_db.couch_tags_db import CouchTagDB
+from core.db.couch_db.couch_sections_db import CouchSectionDB
+from core.configurations import Configurations
+from core.embeddings.get_embedding import EmbeddingModels
+from core.db.qdrant_db.connect_qdrant_db import QdrantDataBase
 from datetime import datetime
-
+import tiktoken
+from fastapi import APIRouter, UploadFile, File, HTTPException, Form
+from core.db.qdrant_db.qdrant_schemas import QdrantSection
+from core.db.qdrant_db.qdrant_questions_db import QdrantQuestionDB
+from core.db.qdrant_db.qdrant_sections_db import QdrantSectionDB
+import re
 import fitz  # PyMuPDF
-from sentence_transformers import SentenceTransformer
-import numpy as np
-from qdrant_client import QdrantClient
-from qdrant_client.http import models
-import couchdb
-import nltk
-nltk.download('punkt')
-from nltk.tokenize import sent_tokenize
+from typing import List, Dict, Any
+from core.generate_unique_id import generate_unique_id, generate_unique_id_from_text
+from core.db.couch_db.couch_schemas import DocumentSchema, QuestionSchema, TagSchema, SectionSchema, UserSchema
+
 
 class PDFIndexer:
-    def __init__(
-        self,
-        qdrant_host: str,
-        qdrant_port: int,
-        collection_name: str,
-        couch_url: str,
-        couch_db_name: str,
-        chunk_size: int = 1000,
-        overlap: int = 200
-    ):
-        """
-        Initialize the PDF indexer with database connections and parameters.
-        
-        Args:
-            qdrant_host: Hostname for Qdrant server
-            qdrant_port: Port for Qdrant server
-            collection_name: Name of the Qdrant collection
-            couch_url: URL for CouchDB server
-            couch_db_name: Name of the CouchDB database
-            chunk_size: Maximum size of text chunks in characters
-            overlap: Number of characters to overlap between chunks
-        """
-        # Initialize embedding model
-        self.model = SentenceTransformer('all-MiniLM-L6-v2')
-        
-        # Initialize Qdrant client
-        self.qdrant = QdrantClient(host=qdrant_host, port=qdrant_port)
-        self.collection_name = collection_name
-        
-        # Create Qdrant collection if it doesn't exist
-        self.qdrant.recreate_collection(
-            collection_name=collection_name,
-            vectors_config=models.VectorParams(
-                size=self.model.get_sentence_embedding_dimension(),
-                distance=models.Distance.COSINE
-            )
+    
+    def __init__(self):
+        #Initialize configuarations and databases
+        self.config = Configurations()
+        self.qdrant = QdrantDataBase()
+        self.qdrant_sections_db =QdrantSectionDB()
+        self.couch_document_db = CouchDocumentsDB()
+        self.couch_tag_db = CouchTagDB()
+        self.couch_section_db = CouchSectionDB()
+        self.embed = EmbeddingModels()
+        self.doc_id = ""
+        self.token_size = self.config.TOKEN_SIZE
+        self.user = self.config.USERNAME
+    
+    def store_in_db(self, document_name, src_path, document_type, document_content, current_user, tags, file_size, sections):
+    # Check if document already exists
+        current_date_time = datetime.now()
+        current_date_time = str(current_date_time)
+        # Create and log document data
+        doc_data = DocumentSchema(
+            _id=self.doc_id,
+            document_name=document_name,
+            document_src=src_path,
+            date_time=current_date_time,
+            extension=".pdf",
+            document_type=document_type,
+            document_text=document_content,
+            created_by=current_user,
+            updated_by=current_user,
+            tags=tags
         )
+
+        # Save document
+        try:
+            response = self.couch_document_db.create_documents(doc_data)
+        except HTTPException as e:
+            raise e
+
+        # Create sections
+        for sec in sections:
+            section = sec["section"]
+            embeddings = sec["embeddings"]
+            token_count = sec["token_size"]
+            section_id = generate_unique_id()
+
+            # Create and log section data
+            section_couch_data = SectionSchema(
+                _id=section_id,
+                document_id=self.doc_id,
+                date_time=current_date_time,
+                section=section,
+                token_count=token_count,
+                tags=tags,
+                embeddings_version="Current_version",
+                owner_id=current_user
+            )
+
+            # Save section
+            try:
+                response = self.couch_section_db.create_section(section_couch_data)
+            except HTTPException as e:
+                raise e
+
+            # Save section in Qdrant
+            try:
+                section_qdrant_data = QdrantSection(
+                    id=section_id,
+                    vector={"text_vector": embeddings},
+                    payload={
+                        "document_id": self.doc_id,
+                        "content": section,
+                        "token_count": token_count,
+                        "tags": tags,
+                        "embeddings_version": "Current_version",
+                        "owner_id": current_user,
+                        "metadata": {"additional_info": None}
+                    }
+                )
+                self.qdrant_sections_db.insert_section(section=section_qdrant_data)
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=str(e))
+                
         
-        # Initialize CouchDB client
-        couch = couchdb.Server(couch_url)
-        if couch_db_name not in couch:
-            self.couch_db = couch.create(couch_db_name)
-        else:
-            self.couch_db = couch[couch_db_name]
-            
-        self.chunk_size = chunk_size
-        self.overlap = overlap
-
-    def generate_document_id(self, text: str, timestamp: str) -> str:
-        """Generate a unique document ID based on text content and timestamp."""
-        content_hash = hashlib.md5(text.encode()).hexdigest()
-        return f"{timestamp}_{content_hash}"
-
+    
     def extract_text_from_pdf(self, pdf_path: str) -> str:
         """Extract text content from a PDF file."""
         doc = fitz.open(pdf_path)
@@ -74,75 +110,64 @@ class PDFIndexer:
         for page in doc:
             text += page.get_text()
         return text
-
-    def create_chunks(self, text: str) -> List[str]:
+    
+    def count_tokens(self, text):
+        # Initialize tiktoken encoder (use the encoder for your chosen model, e.g., GPT-3.5)
+        encoder = tiktoken.get_encoding("cl100k_base")
+        """Return the number of tokens in the provided text using tiktoken."""
+        return len(encoder.encode(text))
+        
+    def generate_chunks_with_embeddings(self, text: str) -> List[Dict]:
         """
-        Split text into chunks with overlap, trying to maintain sentence boundaries.
+        Chunk the text into smaller parts considering token limits, while avoiding sentence splits.
+        Each chunk includes the token size, the section, and its embeddings.
         """
-        sentences = sent_tokenize(text)
+        # Generate a unique ID for the document
+        self.doc_id = generate_unique_id_from_text(text)
+        
+        # Split the text into sentences based on punctuation
+        sentences = re.split(r'(?<=[.!?])\s+', text)  
+        
+        # Initialize variables
         chunks = []
         current_chunk = ""
-        
+        chunks_with_embeddings = []
+
+        # Loop through each sentence to build chunks
         for sentence in sentences:
-            if len(current_chunk) + len(sentence) <= self.chunk_size:
-                current_chunk += sentence + " "
+            sentence = sentence.strip()
+            # Check if adding the sentence to the current chunk exceeds the token limit
+            if self.count_tokens(current_chunk + " " + sentence) > self.token_size:
+                if current_chunk:
+                    # Generate embeddings and store the current chunk's details
+                    chunk_embeddings = self.embed.generate_embeddings(current_chunk)
+                    chunks_with_embeddings.append({
+                        "token_size": self.count_tokens(current_chunk),
+                        "section": current_chunk,
+                        "embeddings": chunk_embeddings
+                    })
+                    chunks.append(current_chunk)
+                
+                # Start a new chunk with the current sentence
+                current_chunk = sentence
             else:
-                chunks.append(current_chunk.strip())
-                # Start new chunk with overlap
-                words = current_chunk.split()
-                overlap_text = " ".join(words[-self.overlap:]) if len(words) > self.overlap else current_chunk
-                current_chunk = overlap_text + " " + sentence + " "
-        
+                # Add the sentence to the current chunk
+                current_chunk += " " + sentence if current_chunk else sentence
+
+        # Handle the final chunk
         if current_chunk:
-            chunks.append(current_chunk.strip())
-            
-        return chunks
+            chunk_embeddings = self.embed.generate_embeddings(current_chunk)
+            chunks_with_embeddings.append({
+                "token_size": self.count_tokens(current_chunk),
+                "section": current_chunk,
+                "embeddings": chunk_embeddings
+            })
+            chunks.append(current_chunk)
 
-    def create_embeddings(self, chunks: List[str]) -> List[np.ndarray]:
-        """Create embeddings for text chunks."""
-        return self.model.encode(chunks)
-
-    def store_in_databases(
-        self,
-        chunks: List[str],
-        embeddings: List[np.ndarray],
-        pdf_path: str,
-        tags: List[str]
-    ) -> None:
-        """Store chunks and their embeddings in both databases."""
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        return chunks_with_embeddings
+    
         
-        for i, (chunk, embedding) in enumerate(zip(chunks, embeddings)):
-            # Generate unique ID for the chunk
-            doc_id = self.generate_document_id(chunk, f"{timestamp}_{i}")
-            
-            # Prepare payload
-            payload = {
-                "document_id": doc_id,
-                "text": chunk,
-                "tags": tags,
-                "source_file": pdf_path,
-                "chunk_index": i,
-                "timestamp": timestamp
-            }
-            
-            # Store in Qdrant
-            self.qdrant.upsert(
-                collection_name=self.collection_name,
-                points=[
-                    models.PointStruct(
-                        id=i,
-                        vector=embedding.tolist(),
-                        payload=payload
-                    )
-                ]
-            )
-            
-            print("embdding : ", i ," ",embedding.tolist())
-            # Store in CouchDB
-            self.couch_db[doc_id] = payload
-
-    def index_pdf(self, pdf_path: str, tags: List[str] = None) -> None:
+    def index_pdf(self, pdf_path, tags, doc_name, file_size):
         """
         Main method to index a PDF file.
         
@@ -152,33 +177,30 @@ class PDFIndexer:
         """
         if tags is None:
             tags = []
-            
-        # Extract text from PDF
+        
         text = self.extract_text_from_pdf(pdf_path)
         
-        # Create chunks
-        chunks = self.create_chunks(text)
+        chunks = self.generate_chunks_with_embeddings(text)
         
-        # Create embeddings
-        embeddings = self.create_embeddings(chunks)
+        self.store_in_db(document_name= doc_name,
+                         src_path= pdf_path,
+                         document_type="pdf",
+                         document_content = text,
+                         current_user= self.user,
+                         tags= tags,
+                         file_size= file_size,
+                         sections= chunks)
         
-        # Store in databases
-        self.store_in_databases(chunks, embeddings, pdf_path, tags)
-    
-
-# Example usage
-if __name__ == "__main__":
-    # Initialize indexer
-    indexer = PDFIndexer(
-        qdrant_host="localhost",
-        qdrant_port=6333,
-        collection_name="pdf_chunks",
-        couch_url="http://admin:password@localhost:5984",
-        couch_db_name="pdf_store"
-    )
-    
-    # Index a PDF file
-    indexer.index_pdf(
-        pdf_path="path/to/your/document.pdf",
-        tags=["document", "research"]
-    )
+         
+        
+        
+            
+            
+             
+            
+        
+        
+        
+        
+        
+        

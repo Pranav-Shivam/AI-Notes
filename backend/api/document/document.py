@@ -2,7 +2,7 @@ from fastapi import APIRouter, UploadFile, File, HTTPException, Form
 from fastapi.responses import FileResponse
 from uuid import uuid4
 import os
-from app.document.document import upload_documents
+from app.document.document import Documents
 from .request.document import (
     DocumentRetrieveRequest,
     DocumentDeleteRequest
@@ -22,7 +22,7 @@ if not os.path.exists(UPLOAD_DIR):
     os.makedirs(UPLOAD_DIR)
 
 @document_router.post("/upload", response_model=DocumentUploadResponse)
-async def upload_document(document: UploadFile = File(...), document_name: str = Form(...)):
+async def upload_document(document: UploadFile = File(...), document_name: str = Form(...), tags: str =Form(...)):
     try:
         # Generate unique document ID
         document_id = str(uuid4())
@@ -36,7 +36,11 @@ async def upload_document(document: UploadFile = File(...), document_name: str =
             content = await document.read()
             buffer.write(content)
         
-        response = upload_documents(file_path=file_path)
+        # Calculate the file size in bytes
+        file_size = os.path.getsize(file_path)
+        
+        response = Documents().upload_documents(pdf_path=file_path, tags=tags.split(","), doc_name= document_name, file_size=file_size)
+        print(response)
         
         if (response == True) :
             return DocumentUploadResponse(

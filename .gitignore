@@ -26,6 +26,7 @@ backend/*.egg
 backend/.pytest_cache/
 backend/.coverage
 backend/htmlcov/
+backend/uploads/
 
 # Frontend
 # dependencies

@@ -1,20 +1,18 @@
 from app.document.indexer import PDFIndexer
+from dotenv import load_dotenv
+from core.configurations import Configurations
+import os
 
+# Load environment variables
+load_dotenv()
 
-
-def upload_documents(file_path):
-    # Initialize indexer
-    indexer = PDFIndexer(
-        qdrant_host="localhost",
-        qdrant_port=6333,
-        collection_name="pdf_chunks",
-        couch_url="http://root:root@localhost:5984",
-        couch_db_name="pdf_store"
-    )
+class Documents:
+    def __init__(self):
+        self.config = Configurations()
+        self.pdf_indexer = PDFIndexer() 
     
-    # Index a PDF file
-    indexer.index_pdf(
-        pdf_path=file_path,
-        tags=["document", "research"]
-    )
-    return True
+    def upload_documents(self, pdf_path, tags, doc_name, file_size):
+        self.pdf_indexer.index_pdf(pdf_path, tags, doc_name, file_size)
+        return True
+        
+    
