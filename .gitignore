@@ -26,7 +26,10 @@ backend/*.egg
 backend/.pytest_cache/
 backend/.coverage
 backend/htmlcov/
-backend/uploads/
+backend/uploads/*.pdf
+backend/1.0.0
+backend/1.11.0
+backend/uploads/*
 
 # Frontend
 # dependencies
@@ -86,3 +89,5 @@ logs/
 # System Files
 Thumbs.db
 .DS_Store
+
+dummy/

@@ -17,11 +17,23 @@ class CouchDocumentsDB:
     def create_documents(self, document_data):
         try:
             payload = document_data.dict(by_alias=True)
-            print(f"Saving document: {payload}")
             doc_id, doc_rev = self.documents_db.save(payload)
-            print(f"Document saved with ID: {doc_id}, Rev: {doc_rev}")
             return {"status": "success", "data": doc_id}
         except Exception as e:
-            print(f"Error saving document: {e}")
             raise HTTPException(status_code=500, detail=str(e))
+    
+    def delete_documents(self, document_id: str):
+        try:
+            doc= self.documents_db[document_id]
+            self.documents_db.delete(doc)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+    
+    def get_doc_by_id(self, document_id):
+        doc = self.documents_db[document_id]
+        return doc
+    
+    def get_document_field_by_id(self, document_id: str, field_name: str):
+        doc = self.get_doc_by_id(document_id)
+        return doc.get(field_name)
     

@@ -27,14 +27,12 @@ class QdrantDataBase:
                     "text_vector": qdrant_models.VectorParams(size=vector_size, distance=distance)
                 }
             )
-            print(f"Collection '{coll_name}' recreated successfully.")
 
     def upsert_points(self, coll_name: str, points: List[PointStruct]) -> qdrant_models.UpdateResult:
         """
         Upserts (inserts or updates) points into the specified collection.
         """
         result = self.client.upsert(collection_name=coll_name, points=points)
-        print(f"Upserted {len(points)} points into collection '{coll_name}'.")
         return result
 
     

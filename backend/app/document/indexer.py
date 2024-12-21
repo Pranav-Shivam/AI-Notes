@@ -10,8 +10,11 @@ import tiktoken
 from fastapi import APIRouter, UploadFile, File, HTTPException, Form
 from core.db.qdrant_db.qdrant_schemas import QdrantSection
 from core.db.qdrant_db.qdrant_questions_db import QdrantQuestionDB
+from api.document.response.document import DocumentErrorResponse, DocumentUploadResponse
 from core.db.qdrant_db.qdrant_sections_db import QdrantSectionDB
 import re
+import os
+import io
 import fitz  # PyMuPDF
 from typing import List, Dict, Any
 from core.generate_unique_id import generate_unique_id, generate_unique_id_from_text
@@ -37,9 +40,10 @@ class PDFIndexer:
     # Check if document already exists
         current_date_time = datetime.now()
         current_date_time = str(current_date_time)
+        print(self.doc_id)
         # Create and log document data
         doc_data = DocumentSchema(
-            _id=self.doc_id,
+            id=self.doc_id,
             document_name=document_name,
             document_src=src_path,
             date_time=current_date_time,
@@ -48,14 +52,15 @@ class PDFIndexer:
             document_text=document_content,
             created_by=current_user,
             updated_by=current_user,
-            tags=tags
+            tags=tags,
+            file_size = file_size
         )
 
         # Save document
         try:
             response = self.couch_document_db.create_documents(doc_data)
         except HTTPException as e:
-            raise e
+            raise HTTPException(status_code=500, detail=str(e))
 
         # Create sections
         for sec in sections:
@@ -63,10 +68,11 @@ class PDFIndexer:
             embeddings = sec["embeddings"]
             token_count = sec["token_size"]
             section_id = generate_unique_id()
+            print(section_id)
 
             # Create and log section data
             section_couch_data = SectionSchema(
-                _id=section_id,
+                id=section_id,
                 document_id=self.doc_id,
                 date_time=current_date_time,
                 section=section,
@@ -80,7 +86,7 @@ class PDFIndexer:
             try:
                 response = self.couch_section_db.create_section(section_couch_data)
             except HTTPException as e:
-                raise e
+                raise HTTPException(status_code=500, detail=str(e))
 
             # Save section in Qdrant
             try:
@@ -98,17 +104,21 @@ class PDFIndexer:
                     }
                 )
                 self.qdrant_sections_db.insert_section(section=section_qdrant_data)
+            
             except Exception as e:
                 raise HTTPException(status_code=500, detail=str(e))
+        return self.doc_id
                 
         
     
-    def extract_text_from_pdf(self, pdf_path: str) -> str:
+    def extract_text_from_pdf(self, contents: bytes) -> str:
         """Extract text content from a PDF file."""
-        doc = fitz.open(pdf_path)
+        pdf_stream = io.BytesIO(contents)
+        doc = fitz.open(stream=pdf_stream, filetype="pdf")
         text = ""
         for page in doc:
             text += page.get_text()
+        doc.close()
         return text
     
     def count_tokens(self, text):
@@ -122,8 +132,6 @@ class PDFIndexer:
         Chunk the text into smaller parts considering token limits, while avoiding sentence splits.
         Each chunk includes the token size, the section, and its embeddings.
         """
-        # Generate a unique ID for the document
-        self.doc_id = generate_unique_id_from_text(text)
         
         # Split the text into sentences based on punctuation
         sentences = re.split(r'(?<=[.!?])\s+', text)  
@@ -167,7 +175,7 @@ class PDFIndexer:
         return chunks_with_embeddings
     
         
-    def index_pdf(self, pdf_path, tags, doc_name, file_size):
+    def index_pdf(self, pdf_path, tags, doc_name, file_size, text):
         """
         Main method to index a PDF file.
         
@@ -177,12 +185,11 @@ class PDFIndexer:
         """
         if tags is None:
             tags = []
-        
-        text = self.extract_text_from_pdf(pdf_path)
-        
+                
         chunks = self.generate_chunks_with_embeddings(text)
         
-        self.store_in_db(document_name= doc_name,
+        try:
+            return self.store_in_db(document_name= doc_name,
                          src_path= pdf_path,
                          document_type="pdf",
                          document_content = text,
@@ -190,8 +197,54 @@ class PDFIndexer:
                          tags= tags,
                          file_size= file_size,
                          sections= chunks)
+        except Exception as e:
+            return DocumentErrorResponse(
+                status="500",
+                message=f"An unexpected error occurred: {str(e)}",
+                document_id=self.doc_id
+            )
         
-         
+    
+    def process_pdf(self, pdf_content: bytes, tags, document_name):
+        
+        text = self.extract_text_from_pdf(pdf_content)
+        self.doc_id = generate_unique_id_from_text(text)
+        
+        unique_filename = f"{self.doc_id}.{self.config.PDF_FILE_TYPE}"
+        local_path = os.path.join(self.config.UPLOAD_DIR, unique_filename)
+        # Check if the file already exists
+        if os.path.exists(local_path):
+            return DocumentErrorResponse(
+                document_id=self.doc_id,
+                status="409",
+                message="The file is already present. Please upload a different file."
+            )
+            
+            
+        with open(local_path, 'wb') as f:
+            f.write(pdf_content)
+        
+        file_size = os.path.getsize(local_path)
+        try:        
+            document_id = self.index_pdf(
+                            pdf_path=local_path,
+                            tags= tags,
+                            doc_name= document_name,
+                            file_size = str(file_size),
+                            text= text)
+            return DocumentUploadResponse(
+                document_id=document_id,
+                status="success",
+                message="Document uploaded successfully.",
+                created_at=datetime.utcnow().isoformat()
+            )
+        except Exception as e:
+            return DocumentErrorResponse(
+                status="500",
+                message=f"An unexpected error occurred: {str(e)}",
+                document_id=self.doc_id
+            )
+                 
         
         
             

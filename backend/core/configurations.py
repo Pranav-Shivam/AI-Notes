@@ -30,6 +30,13 @@ class Configurations:
     
     # User
     USERNAME = "Pranav Shivam"
+    
+    #File Path
+    UPLOAD_DIR = "uploads"
+    MEMORY_THRESOLD: int = 100 * 1024 * 1024
+    CHUNK_SIZE: int = 1024 * 1024
+    MAX_WORKER: int = 4
+    PDF_FILE_TYPE: str = "pdf" 
 
 
 # if __name__ == "__main__":
