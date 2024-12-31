@@ -18,6 +18,13 @@ class SectionPayload(BaseModel):
     owner_id: str
     metadata: Optional[SectionMetadata] = None
 
+class QdrantSectionResponse(BaseModel):
+    section: str
+    score: float
+
+class QdrantSectionResponseList(BaseModel):
+    sections: List[QdrantSectionResponse]
+
 class QuestionMetadata(BaseModel):
     source: Optional[str] = None
     context: Optional[str] = None

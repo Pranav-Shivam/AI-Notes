@@ -1,6 +1,6 @@
 import numpy as np
 from core.configurations import Configurations
-from core.openai.open_ai_connector import OpenAIConnector
+from core.open_ai.open_ai_connector import OpenAIConnector
 import openai
 
 class EmbeddingModels:
@@ -21,7 +21,7 @@ class EmbeddingModels:
     
     def generate_embeddings(self, text):
         try:
-            response = openai.embeddings.create(
+            response = self.client.embeddings.create(
                 model=self.model,
                 input=text
             )

@@ -10,3 +10,6 @@ class ChunkResponse(BaseModel):
     total_pages: int
     current_chunk: Dict[str, int]
     content: List[PageContent]
+    
+class BotTagResponse(BaseModel):
+    tags: List[str]

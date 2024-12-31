@@ -40,7 +40,7 @@ class PDFIndexer:
     # Check if document already exists
         current_date_time = datetime.now()
         current_date_time = str(current_date_time)
-        print(self.doc_id)
+        # print(self.doc_id)
         # Create and log document data
         doc_data = DocumentSchema(
             id=self.doc_id,
@@ -68,7 +68,7 @@ class PDFIndexer:
             embeddings = sec["embeddings"]
             token_count = sec["token_size"]
             section_id = generate_unique_id()
-            print(section_id)
+            # print(section_id)
 
             # Create and log section data
             section_couch_data = SectionSchema(

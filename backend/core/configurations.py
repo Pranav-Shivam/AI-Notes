@@ -11,6 +11,7 @@ class Configurations:
     QDRANT_DOCUMENTS_COLLECTION = os.getenv('QDRANT_DOCUMENTS_COLLECTION', 'documents')
     QDRANT_SECTIONS_COLLECTION = os.getenv('QDRANT_SECTIONS_COLLECTION', 'sections')
     QDRANT_QUESTIONS_COLLECTION = os.getenv('QDRANT_QUESTIONS_COLLECTION', 'questions')
+    QUERY_VECTOR_NAME = "text_vector"
     
     # CouchDB Configurations
     COUCH_URL = os.getenv('COUCH_URL', 'http://localhost:5984')
