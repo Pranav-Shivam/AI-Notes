@@ -37,7 +37,8 @@ class Configurations:
     MEMORY_THRESOLD: int = 100 * 1024 * 1024
     CHUNK_SIZE: int = 1024 * 1024
     MAX_WORKER: int = 4
-    PDF_FILE_TYPE: str = "pdf" 
+    PDF_FILE_TYPE: str = "pdf"
+    MINIMUM_SCORE: float = 0.75 
 
 
 # if __name__ == "__main__":

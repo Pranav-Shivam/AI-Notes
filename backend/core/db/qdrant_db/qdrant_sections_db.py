@@ -1,11 +1,52 @@
 from typing import List, Dict, Any, Optional, Tuple
 from pydantic import BaseModel, Field
 from core.configurations import Configurations
+from qdrant_client.http import models
 from core.db.qdrant_db.connect_qdrant_db import QdrantDataBase
 from qdrant_client.http.models import PointStruct, Filter, FieldCondition, MatchValue, ScoredPoint
 from core.db.qdrant_db.qdrant_schemas import QdrantSection, QdrantSectionResponse, QdrantSectionResponseList
 from core.embeddings.get_embedding import EmbeddingModels
 from app.bot.schemas import DocumentIdResponse, BotTagResponse
+
+# Core Utilities
+from core.configurations import Configurations
+from core.utils.count_token import CountTokens
+from core.utils.current_date_time import CurrentDateTime
+from core.utils.prompt_generator import PromptGenerator
+
+# Database Field Enums
+from core.utils.enums import (
+    CouchDBUserFields,
+    CouchDBDocumentFields,
+    CouchDBTagFields,
+    CouchDBSectionFields,
+    CouchDBQuestionFields,
+    CouchDBThreadFields,
+    CouchDBMessageFields,
+    QdrantSectionFields,
+    QdrantQuestionFields
+)
+
+# Management and Configuration Enums
+from core.utils.enums import (
+    SearchManagements,
+    TokenManagements,
+    MemoryManagement,
+    SystemConfigurations,
+    BotStrategy
+)
+
+# File Related Enums
+from core.utils.enums import (
+    FileTypes,
+    FileExtensions
+)
+
+# HTTP Status Enums
+from core.utils.enums import (
+    HTTPStatus,
+    HTTPStatusCode
+)
 
 
 class QdrantSectionDB:
@@ -14,7 +55,7 @@ class QdrantSectionDB:
         self.config = Configurations()
         self.embedding_models = EmbeddingModels()
         self.query_vector_name = self.config.QUERY_VECTOR_NAME
-        
+        self.sections_utils = QdrantSectionFields
         self.collection_name = self.config.QDRANT_SECTIONS_COLLECTION
 
     def insert_section(self, section: QdrantSection):
@@ -46,15 +87,34 @@ class QdrantSectionDB:
         document_id_response = DocumentIdResponse(document_ids=[])
 
         for sec in sections:
-            response_result = QdrantSectionResponse(
-                section=sec.payload.get("content", ""),
-                score=sec.score,
-            )
-            document_id_response.document_ids.append(sec.id)
-            section_response.sections.append(response_result)
+            if sec.score > self.config.MINIMUM_SCORE: 
+                response_result = QdrantSectionResponse(
+                    section=sec.payload.get("content", ""),
+                    score=sec.score,
+                )
+                document_id_response.document_ids.append(sec.id)
+                section_response.sections.append(response_result)
 
-            # Collect unique tags efficiently using set operations
-            tag_response.tags.extend(set(sec.payload.get("tags", [])) - set(tag_response.tags))
+                # Collect unique tags efficiently using set operations
+                tag_response.tags.extend(set(sec.payload.get("tags", [])) - set(tag_response.tags))
 
-        return tag_response, section_response, document_id_response
+            return tag_response, section_response, document_id_response
+    
+    # Filter condition for content search
+    def create_content_filter_based_on_document_id(self, document_id: str):
+        
+        return models.Filter(
+            must=[models.FieldCondition(key=self.sections_utils.DOCUMENT_ID.value, match=models.MatchValue(value=document_id))]
+        )
+        
+    def filter_sections_based_on_document_id(self, document_id:str, query:str):
+        
+        query_vector = self.embedding_models.generate_embeddings(query)
+        content_filter = self.create_content_filter_based_on_document_id(document_id)
+        filtered_sections = self.client.search_sections_based_on_document_id(query_vector= query_vector, content_filter= content_filter)
+        return self._process_search_results(filtered_sections)
+        
+
+     
+        
     

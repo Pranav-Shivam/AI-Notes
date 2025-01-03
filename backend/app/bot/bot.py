@@ -3,8 +3,9 @@ from core.db.couch_db.couch_sections_db import CouchSectionDB
 from core.db.couch_db.couch_documents_db import CouchDocumentsDB
 from core.db.qdrant_db.qdrant_sections_db import QdrantSectionDB
 from api.bot.request.bot import BotQueryRequest, BotDocumentsQueryRequest
-from api.bot.response.bot import BotQueryResponse, BotDocumentsQueryResponse
+from api.bot.response.bot import BotQueryResponse, BotDocumentsQueryResponse, BotResponse
 from typing import List
+from core.utils.enums import *
 from core.utils.count_token import CountTokens
 from core.utils.current_date_time import CurrentDateTime
 from core.open_ai.open_ai_connector import OpenAIConnector
@@ -112,11 +113,46 @@ class BotService:
         lines = [line.strip() for line in text.split("\n") if line.strip()]
         return " ".join(lines)
     
-class DcoumentBotService:
-    pass
-class DocumentBotThreadService:
-    pass
-class BotThreadService:
-    pass
-        
-        
+
+class DocumentBotService:
+    
+    def __init__(self):
+        self.config = Configurations()
+        self.couch_sections = CouchSectionDB()
+        self.couch_documents = CouchDocumentsDB()
+        self.qdrant_sections = QdrantSectionDB()
+        self.embedding_models = EmbeddingModels()
+        self.create_prompt = PromptGenerator()
+        self.open_ai = OpenAIConnector()
+        self.date_time = CurrentDateTime()
+        self.count_tokens = CountTokens()
+        self.sections_utils = QdrantSectionFields
+        self.bot_service = BotService()
+        self.tags_response = BotTagResponse(tags = [])
+    
+    def get_response_from_bot_on_document(self, bot_request: BotDocumentsQueryRequest) -> BotResponse:
+        tag_response, section_response, document_id_response = self.retrieve_sections_from_qdrant(bot_request)
+        combined_sections = self.bot_service.filter_sections_by_score(section_response.sections)
+        combined_all_section: str = self.bot_service.combine_all_sections(combined_sections.sections)
+
+        # # Log token counts
+        # total_tokens = self.count_tokens.count_tokens(combined_all_section)
+        # print(f"Combined context token count: {total_tokens}")
+
+        prompt = self.bot_service.generate_prompts_from_query_sections(query=bot_request.query, sections=combined_all_section)
+        open_ai_response = self.bot_service.call_llm_to_generate_response(prompt=prompt)
+
+        print([bot_request.query, open_ai_response, document_id_response.document_ids, tag_response.tags, self.date_time.get_current_time()])
+        return BotQueryResponse(
+            query=bot_request.query,
+            response=open_ai_response or "No response",
+            document_ids=document_id_response.document_ids,
+            tags=tag_response.tags,
+            date_time=self.date_time.get_current_time()
+        )
+    
+    def retrieve_sections_from_qdrant(self, bot_request: BotDocumentsQueryRequest):
+        return self.qdrant_sections.filter_sections_based_on_document_id(document_id= bot_request.document_id, query= bot_request.query)
+    
+    def maintain_follow_question(self, bot_request: BotDocumentsQueryRequest):
+        pass

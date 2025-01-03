@@ -1,5 +1,6 @@
 from typing import List, Dict, Any, Optional, Union
 from qdrant_client import QdrantClient
+from qdrant_client.http import models
 from qdrant_client.http.models import (
     PointStruct, 
     Filter, 
@@ -15,12 +16,14 @@ from qdrant_client.http.models import (
 from qdrant_client.http import models as qdrant_models
 from core.configurations import Configurations
 from fastapi import HTTPException
+from core.utils.enums import *
 
 class QdrantDataBase:
     
     def __init__(self):
         """Initialize the QdrantDatabase with configuration and client connection."""
         self.config = Configurations()
+        self.sections_utils = QdrantSectionFields
         self.client = self.connect_qdrant_db()
         
     def connect_qdrant_db(self) -> QdrantClient:
@@ -100,3 +103,15 @@ class QdrantDataBase:
             return info.dict()
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Failed to get collection info: {str(e)}")
+    
+    
+    def search_sections_based_on_document_id(self, query_vector, content_filter, limit=10000):
+    
+        search_params = models.SearchParams(hnsw_ef=128, exact=False)
+        return self.client.search(
+            collection_name = self.sections_utils.DATABASE_NAME.value,
+            query_vector=(self.sections_utils.QUERY_VECTOR_NAME.value, query_vector),
+            query_filter=content_filter,
+            search_params=search_params,
+            limit=limit
+        ) 
