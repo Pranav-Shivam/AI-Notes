@@ -11,6 +11,7 @@ class QdrantSection(BaseModel):
 
 class SectionPayload(BaseModel):
     document_id: str
+    question_id: str
     content: str
     token_count: int
     tags: List[str] = []
@@ -29,17 +30,16 @@ class QuestionMetadata(BaseModel):
     source: Optional[str] = None
     context: Optional[str] = None
 
-class QdrantQuestion(BaseModel):
-    id: str = Field(..., description="Unique identifier for the question")
-    vector: List[float] = Field(..., description="Vector representation")
-    payload: Dict[str, Any] = Field(..., description="Question payload details")
 
 class QuestionPayload(BaseModel):
     document_id: str
     question: str
     answer: str
-    tags: List[str] = []
-    related_section_ids: List[str] = []
+    tags: List[str]
     embeddings_version: str
     owner_id: str
-    metadata: Optional[QuestionMetadata] = None
+    
+class QdrantQuestionSchema(BaseModel):
+    id: str
+    vector: Dict[str, List[float]]
+    payload: Dict[str, Any]

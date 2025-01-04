@@ -102,6 +102,7 @@ class CouchDBMessageFields(Enum):
 # Enums for Qdrant section fields
 class QdrantSectionFields(Enum):
     SECTION_ID = "section_id"
+    QUESTION_ID = "question_id"
     VECTOR = "vector"
     PAYLOAD = "payload"
     DOCUMENT_ID = "document_id"
@@ -132,6 +133,7 @@ class QdrantQuestionFields(Enum):
     CONTEXT = "context"
     DATABASE_NAME = "questions"
     QUERY_VECTOR_NAME = "text_vector"
+    ADDITIONAL_INFO = "additional_info"
 
 # Constants for search parameters
 class SearchManagements(Enum):

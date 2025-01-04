@@ -142,7 +142,7 @@ class DocumentBotService:
         prompt = self.bot_service.generate_prompts_from_query_sections(query=bot_request.query, sections=combined_all_section)
         open_ai_response = self.bot_service.call_llm_to_generate_response(prompt=prompt)
 
-        print([bot_request.query, open_ai_response, document_id_response.document_ids, tag_response.tags, self.date_time.get_current_time()])
+        # print([bot_request.query, open_ai_response, document_id_response.document_ids, tag_response.tags, self.date_time.get_current_time()])
         return BotQueryResponse(
             query=bot_request.query,
             response=open_ai_response or "No response",
@@ -155,4 +155,4 @@ class DocumentBotService:
         return self.qdrant_sections.filter_sections_based_on_document_id(document_id= bot_request.document_id, query= bot_request.query)
     
     def maintain_follow_question(self, bot_request: BotDocumentsQueryRequest):
-        pass
+        thread_response = get_thre

@@ -3,7 +3,7 @@ from pydantic import BaseModel, Field
 from core.configurations import Configurations
 from core.db.qdrant_db.connect_qdrant_db import QdrantDataBase
 from qdrant_client.http.models import PointStruct, Filter, FieldCondition, MatchValue
-from core.db.qdrant_db.qdrant_schemas import QdrantQuestion
+from core.db.qdrant_db.qdrant_schemas import QdrantQuestionSchema
 
 
 class QdrantQuestionDB:
@@ -12,16 +12,20 @@ class QdrantQuestionDB:
         self.config =Configurations()
         self.collection_name = self.config.QDRANT_QUESTIONS_COLLECTION
 
-    def insert_question(self, question: QdrantQuestion):
+    def insert_question(self, question: QdrantQuestionSchema):
         """
         Inserts a new question into the Qdrant collection.
         """
-        point = PointStruct(
-            id=question.id,
-            vector=question.vector,
-            payload=question.payload
-        )
-        self.client.client.upsert(collection_name=self.collection_name, points=[point])
+        # self.client.recreate_collection(coll_name=self.collection_name)
+        try:
+            pointd = PointStruct(
+                id=question.id,
+                vector=question.vector,
+                payload=question.payload
+            )
+            self.client.upsert_points(coll_name= self.collection_name, points= [pointd])
+        except Exception as e:
+            print(str(e))
 
     def get_question_by_id(self, question_id: str) -> Optional[Dict[str, Any]]:
         """
@@ -53,7 +57,7 @@ class QdrantQuestionDB:
             points_selector={"ids": [question_id]}
         )
 
-    def update_question(self, question: QdrantQuestion):
+    def update_question(self, question: QdrantQuestionSchema):
         """
         Updates an existing question.
         """

@@ -1,6 +1,6 @@
 from core.db.couch_db.connect_couch_db import CouchDataBase
 from core.configurations import Configurations
-from core.db.couch_db.couch_schemas import SectionSchema
+# from core.db.couch_db.couch_schemas import SectionSchema
 from couchdb import ResourceNotFound
 from datetime import datetime
 from typing import List, Dict, Any

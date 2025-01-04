@@ -18,7 +18,7 @@ import io
 import fitz  # PyMuPDF
 from typing import List, Dict, Any
 from core.generate_unique_id import generate_unique_id, generate_unique_id_from_text
-from core.db.couch_db.couch_schemas import DocumentSchema, QuestionSchema, TagSchema, SectionSchema, UserSchema
+from core.db.couch_db.couch_schemas import CouchDocumentSchema, CouchQuestionSchema, CouchTagSchema, CouchSectionSchema, CouchUserSchema
 
 
 class PDFIndexer:
@@ -42,7 +42,7 @@ class PDFIndexer:
         current_date_time = str(current_date_time)
         # print(self.doc_id)
         # Create and log document data
-        doc_data = DocumentSchema(
+        doc_data = CouchDocumentSchema(
             id=self.doc_id,
             document_name=document_name,
             document_src=src_path,
@@ -71,8 +71,9 @@ class PDFIndexer:
             # print(section_id)
 
             # Create and log section data
-            section_couch_data = SectionSchema(
+            section_couch_data = CouchSectionSchema(
                 id=section_id,
+                question_id= "",
                 document_id=self.doc_id,
                 date_time=current_date_time,
                 section=section,
