@@ -63,7 +63,9 @@ class QdrantSectionDB:
         Inserts a new section into the Qdrant collection.
         """
         # Recreate collection
-        # self.client.recreate_collection(coll_name=self.collection_name)
+        if not self.client.client.collection_exists(collection_name=self.collection_name):
+            self.client.recreate_collection(coll_name=self.collection_name)
+            
         point = PointStruct(
             id=section.id,
             vector=section.vector,

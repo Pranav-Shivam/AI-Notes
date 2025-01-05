@@ -40,9 +40,9 @@ class QdrantDataBase:
                           vector_size: int = 1536, 
                           distance: Distance = Distance.COSINE) -> None:
         try:
-            # # Delete if exists
-            # if self.client.collection_exists(coll_name):
-            #     self.client.delete_collection(coll_name)
+            # Delete if exists
+            if self.client.collection_exists(coll_name):
+                self.client.delete_collection(coll_name)
             
             # Create new collection
             self.client.create_collection(

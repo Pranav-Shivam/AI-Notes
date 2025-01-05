@@ -16,7 +16,8 @@ class QdrantQuestionDB:
         """
         Inserts a new question into the Qdrant collection.
         """
-        # self.client.recreate_collection(coll_name=self.collection_name)
+        if not self.client.client.collection_exists(collection_name=self.collection_name):
+            self.client.recreate_collection(coll_name=self.collection_name)
         try:
             pointd = PointStruct(
                 id=question.id,

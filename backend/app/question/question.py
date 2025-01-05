@@ -22,7 +22,7 @@ from core.db.couch_db.couch_sections_db import CouchSectionDB
 from core.db.couch_db.couch_thread_db import CouchThreadDB
 from core.db.qdrant_db.qdrant_questions_db import QdrantQuestionDB
 from core.db.couch_db.couch_schemas import CouchQuestionSchema, ThreadMessages, ThreadMessageMetadata, ThreadMetadata, CouchThreadSchema, CouchTagSchema, ThreadMessageList, CouchSectionSchema
-from core.db.qdrant_db.qdrant_schemas import QdrantQuestionSchema, QdrantSection, QuestionPayload
+from core.db.qdrant_db.qdrant_schemas import QdrantQuestionSchema, QdrantSection, QuestionPayload, SectionMetadata, SectionPayload
 from core.utils.current_date_time import CurrentDateTime
 from core.generate_unique_id import generate_unique_id, generate_unique_id_from_text
 from couchdb.http import ResourceNotFound, ResourceConflict, ServerError
@@ -158,13 +158,13 @@ class QuestionService:
                 question=question,
                 answer=answer,
                 tags=tags,
-                embeddings_version="Current_version",
+                embeddings_version=self.config.OPENAI_EMBEDDING_MODEL,
                 owner_id=user
             )
             
             question_data = QdrantQuestionSchema(
                 id=question_id,
-                vector={"text_vector": quest_embed},
+                vector={self.config.QUERY_VECTOR_NAME: quest_embed},
                 payload=payload.dict()
             )
             self.qdrant_question_db.insert_question(question_data)
@@ -220,21 +220,27 @@ class QuestionService:
 
     def _save_section_in_qdrant(self, section_id: str, question_id: str, document_id: str, section_data: EmbeddingSchema, tags: List[str], user: str) -> None:
         """Saves a section's embeddings in Qdrant."""
-        section_qdrant_data = QdrantSection(
-            id=section_id,
-            vector={"text_vector": section_data.embeddings},
-            payload = {
-                "document_id": document_id,
-                "question_id": question_id,
-                "content": section_data.section_chunk,
-                "token_count": section_data.token_size,
-                "tags": tags,
-                "embeddings_version": "Current_version",
-                "owner_id": user,
-                "metadata": {"additional_info": {}}  # Include metadata if required
-            }
-        )
-        self.qdrant_section_db.insert_section(section_qdrant_data)
+        try:
+            payload = SectionPayload(
+                document_id=document_id,
+                question_id=question_id,
+                content=section_data.section_chunk,
+                token_count=section_data.token_size,
+                tags=tags,
+                embeddings_version=self.config.OPENAI_EMBEDDING_MODEL,
+                owner_id=user,
+                metadata=SectionMetadata(additional_info=None)
+            )
+
+            section_qdrant_data = QdrantSection(
+                id=section_id,
+                vector={self.config.QUERY_VECTOR_NAME: section_data.embeddings},
+                payload=payload.dict()
+            )
+            self.qdrant_section_db.insert_section(section_qdrant_data)
+        except Exception as e:
+            print("ERROR: ", str(e))
+            raise Exception(f"Failed to save section in Qdrant: {str(e)}")
 
     def _generate_unique_id(self) -> str:
         """Generates a unique ID using UUID."""
