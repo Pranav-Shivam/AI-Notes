@@ -2,9 +2,10 @@ from core.configurations import Configurations
 from core.db.couch_db.couch_sections_db import CouchSectionDB
 from core.db.couch_db.couch_documents_db import CouchDocumentsDB
 from core.db.qdrant_db.qdrant_sections_db import QdrantSectionDB
-from api.bot.request.bot import BotQueryRequest, BotDocumentsQueryRequest
+from api.bot.request.bot import BotQueryRequest, BotDocumentsQueryRequest, BotRequest
 from api.bot.response.bot import BotQueryResponse, BotDocumentsQueryResponse, BotResponse
-from typing import List
+from typing import List, Dict
+from core.db.couch_db.couch_thread_db import CouchThreadDB
 from core.utils.enums import *
 from core.utils.count_token import CountTokens
 from core.utils.current_date_time import CurrentDateTime
@@ -113,6 +114,24 @@ class BotService:
         lines = [line.strip() for line in text.split("\n") if line.strip()]
         return " ".join(lines)
     
+    def get_follow_up_answer(self, qna_list: List[Dict[str, str]], follow_up_question: str) -> str:
+        # Combine Q&A pairs into a context string
+        qna_strings = [f"Q: {qa['query']}\nA: {qa['response']}" for qa in qna_list]
+        context = self.combine_all_sections(qna_strings, max_total_tokens=8192, reserved_tokens=1500)
+
+        # Generate prompt with follow-up question and context
+        prompt = self.generate_prompt_for_follow_up(follow_up_question, context)
+
+        # Call LLM to generate response
+        response = self.call_llm_to_generate_response(prompt)
+
+        return response or "No response"
+
+    def generate_prompt_for_follow_up(self, question: str, context: str) -> str:
+        # Construct prompt using the context and question
+        prompt = f"Context:\n{context}\n\nFollow-up Question: {question}\nAnswer:"
+        return prompt
+    
 
 class DocumentBotService:
     
@@ -154,5 +173,36 @@ class DocumentBotService:
     def retrieve_sections_from_qdrant(self, bot_request: BotDocumentsQueryRequest):
         return self.qdrant_sections.filter_sections_based_on_document_id(document_id= bot_request.document_id, query= bot_request.query)
     
-    def maintain_follow_question(self, bot_request: BotDocumentsQueryRequest):
-        thread_response = get_thre
+
+class BotThreadService:
+    
+    def __init__(self) -> None:
+        self.thread_db = CouchThreadDB()
+        self.bot_service = BotService()
+    
+    def get_answer_from_thread_bot(bot_request: BotRequest):
+        pass
+    
+    def get_thread_list(self, thread_id:str):
+        if thread_id:
+            qna_list = self.thread_db.get_query_response_by_thread_id(thread_id=thread_id)
+        else:
+            return []
+    
+    def check_for_thread(self, bot_request: BotRequest):
+        if self.thread_db.check_for_thread(thread_id= bot_request.thread_id):
+            qna_list= self.get_thread_list(thread_id= bot_request.thread_id)
+            answer_from_vdb = True
+        else:
+            bot_req = BotQueryRequest(
+                query= bot_request.query
+            )
+            return self.bot_service.get_answer_from_bot(bot= bot_req)
+        
+    def combine_follow_up_question(self, query, qna_list):
+        
+        pass
+        
+    
+    
+    

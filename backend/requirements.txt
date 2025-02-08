@@ -9,3 +9,9 @@ couchdb
 openai
 numpy
 python-dotenv
+sentence_transformers
+spacy
+torch
+transformers
+pydantic[email]
+tiktoken
