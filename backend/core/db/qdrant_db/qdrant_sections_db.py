@@ -100,7 +100,7 @@ class QdrantSectionDB:
                 # Collect unique tags efficiently using set operations
                 tag_response.tags.extend(set(sec.payload.get("tags", [])) - set(tag_response.tags))
 
-            return tag_response, section_response, document_id_response
+        return tag_response, section_response, document_id_response
     
     # Filter condition for content search
     def create_content_filter_based_on_document_id(self, document_id: str):

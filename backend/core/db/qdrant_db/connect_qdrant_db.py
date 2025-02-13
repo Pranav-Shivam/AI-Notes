@@ -81,6 +81,7 @@ class QdrantDataBase:
                 with_payload=True,
                 limit=top_k
             )
+            # print(search_results)
             return search_results
         except Exception as e:
             raise HTTPException(status_code=400, detail=str(e))

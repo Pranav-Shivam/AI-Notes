@@ -113,6 +113,7 @@ class CouchThreadSchema(BaseModel):
     status: Literal["active", "archived", "closed"]  # Strictly limited values
     tags: List[str]
     messages: ThreadMessageList
+    contexts: List[str]
     # permissions: Permissions
     # metadata: Optional[ThreadMetadata]
     

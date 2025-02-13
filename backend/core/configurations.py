@@ -38,7 +38,7 @@ class Configurations:
     CHUNK_SIZE: int = 1024 * 1024
     MAX_WORKER: int = 4
     PDF_FILE_TYPE: str = "pdf"
-    MINIMUM_SCORE: float = 0.75 
+    MINIMUM_SCORE: float = 0.5 
 
 
 # if __name__ == "__main__":

@@ -7,7 +7,12 @@ from typing import List, Dict, Optional, Any
 from uuid import uuid4
 import couchdb
 from core.generate_unique_id import generate_unique_id, generate_unique_id_from_text
+from couchdb.mapping import Document, TextField, ListField
 
+
+    
+    
+    
 class CouchThreadDB:
     def __init__(self):
         self.couch_db = CouchDataBase()
@@ -28,6 +33,7 @@ class CouchThreadDB:
     
     def get_thread_by_id(self, thread_id: str):
         doc = self.thread_db[thread_id]
+        return doc
     
     def get_query_response_by_thread_id(self, thread_id: str):
         
@@ -44,6 +50,20 @@ class CouchThreadDB:
             return queries_responses
         except Exception as e:
             return []
+        
+    def add_new_context(self, context: str, thread_id):
+        thread_doc = self.get_thread_by_id(thread_id)
+        couch_thread = CouchThreadSchema(**thread_doc)
+        couch_thread.contexts = couch_thread.contexts + context
+        self.thread_db.save(couch_thread.dict(by_alias=True))
+        return
+        
+        
+    
+    def fetch_latest_context(self, thread_id):
+        thread_doc = self.get_thread_by_id(thread_id)
+        couch_thread = CouchThreadSchema(**thread_doc)
+        return couch_thread.contexts[-1]
     
 
     def append_message_to_thread(self, thread_id: str, query: str, response: str):

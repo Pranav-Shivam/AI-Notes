@@ -7,7 +7,7 @@ class OpenAIConnector:
     def response_from_openai(self, prompt):
         try:
             response = self.client.chat.completions.create(
-            model="gpt-4",
+            model="gpt-3.5-turbo-16k",
             messages=[
                 {"role": "system", "content": "You are a helpful assistant."},
                 {"role": "user", "content": prompt}
