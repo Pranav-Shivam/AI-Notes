@@ -1,3 +1,8 @@
+import asyncio
+import time
+import hashlib
+import openai
+from qdrant_client import QdrantClient
 from core.configurations import Configurations
 from core.db.couch_db.couch_sections_db import CouchSectionDB
 from core.db.couch_db.couch_documents_db import CouchDocumentsDB
@@ -338,4 +343,97 @@ class HyDEBotService:
         
     
     
-    
+
+class BotService:
+    def __init__(self):
+        self.qdrant_client = QdrantClient(url="http://localhost:6333")
+        self.cache = {}
+        self.conversation_history = []
+        self.max_memory_size = 5
+
+    async def generate_embedding(self, text: str) -> List[float]:
+        cache_key = hashlib.sha256(text.encode()).hexdigest()
+        if cache_key in self.cache:
+            return self.cache[cache_key]
+        response = await openai.Embedding.acreate(input=text, model="text-embedding-ada-002")
+        embedding = response['data'][0]['embedding']
+        self.cache[cache_key] = embedding
+        return embedding
+
+    async def retrieve_relevant_sections(self, query_embedding: List[float], top_k: int = 3) -> List[str]:
+        results = self.qdrant_client.search(
+            collection_name="your_collection",
+            query_vector=query_embedding,
+            limit=top_k
+        )
+        return [hit.payload.get("text", "") for hit in results if "text" in hit.payload]
+
+    async def call_small_llm(self, prompt: str) -> str:
+        response = await openai.ChatCompletion.acreate(
+            model="gpt-3.5-turbo", messages=[{"role": "system", "content": prompt}]
+        )
+        return response.choices[0].message.content.strip()
+
+    async def rewrite_followup_query(self, followup_question: str) -> str:
+        return await self.call_small_llm(f"Rewrite this question clearly: {followup_question}")
+
+    async def summarize_conversation_history(self):
+        if len(self.conversation_history) > self.max_memory_size:
+            history_text = "\n".join(
+                [f"Q: {qa['query']}\nA: {qa['response']}" for qa in self.conversation_history]
+            )
+            summary = await self.call_small_llm(f"Summarize: {history_text}")
+            embedding = await self.generate_embedding(summary)
+            self.qdrant_client.upsert(
+                collection_name="conversation_summaries",
+                points=[{"vector": embedding, "payload": {"summary": summary}}]
+            )
+            self.conversation_history = [{"query": "Summary", "response": summary}]
+
+    def assemble_prompt(self, followup_question: str, context_sections: List[str]) -> str:
+        history = "\n".join([f"Q: {qa['query']}\nA: {qa['response']}" for qa in self.conversation_history])
+        context = "\n".join(context_sections)
+        return f"Conversation History:\n{history}\n\nContext:\n{context}\n\nFollow-Up: {followup_question}\nAnswer:"
+
+    async def call_gpt4(self, prompt: str) -> str:
+        response = await openai.ChatCompletion.acreate(
+            model="gpt-4", messages=[{"role": "system", "content": prompt}]
+        )
+        return response.choices[0].message.content.strip()
+
+    async def validate_response(self, generated_answer: str) -> bool:
+        embedding = await self.generate_embedding(generated_answer)
+        retrieved_context = await self.retrieve_relevant_sections(embedding)
+        context_text = " ".join(retrieved_context).lower()
+        return any(len(word) > 3 and word.lower() in context_text for word in generated_answer.split())
+
+    async def get_follow_up_answer(self, qna_list: List[Dict[str, str]], follow_up_question: str) -> str:
+        for qa in qna_list:
+            self.conversation_history.append(qa)
+        await self.summarize_conversation_history()
+        rewritten_query = await self.rewrite_followup_query(follow_up_question)
+        followup_embedding = await self.generate_embedding(rewritten_query)
+        retrieved_context = await self.retrieve_relevant_sections(followup_embedding)
+        prompt = self.assemble_prompt(rewritten_query, retrieved_context)
+        response = await self.call_gpt4(prompt)
+        self.conversation_history.append({"query": follow_up_question, "response": response})
+        return response
+
+    async def benchmark_get_follow_up_answer(self, qna_list: List[Dict[str, str]], follow_up_question: str, threshold: float = 5.0) -> str:
+        start_time = time.time()
+        response = await self.get_follow_up_answer(qna_list, follow_up_question)
+        elapsed = time.time() - start_time
+        return response
+
+async def main():
+    bot_service = BotService()
+    qna_list = [
+        {"query": "What is the project timeline?", "response": "The project is scheduled over 6 months."},
+        {"query": "What are the main risks?", "response": "Budget overruns and staffing issues are the primary risks."}
+    ]
+    follow_up_question = "What about the deadline adjustments due to the new budget constraints?"
+    response = await bot_service.benchmark_get_follow_up_answer(qna_list, follow_up_question, threshold=5.0)
+    print(f"Final Response: {response}")
+
+if __name__ == "__main__":
+    asyncio.run(main())
